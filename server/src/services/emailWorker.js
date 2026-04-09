@@ -22,11 +22,18 @@ async function sendSingleEmail(account, campaign, lead) {
   try {
     const decryptedPassword = decrypt(account.app_password);
 
+    const port = account.smtp_port;
+    const isSecure = port === 465;
+
     const transporter = nodemailer.createTransport({
       host: account.smtp_host,
-      port: account.smtp_port,
-      secure: !!account.secure,
+      port: port,
+      secure: isSecure,
+      requireTLS: port === 587,
       auth: { user: account.email, pass: decryptedPassword },
+      tls: {
+        rejectUnauthorized: false
+      },
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 30000,

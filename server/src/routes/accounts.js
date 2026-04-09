@@ -40,8 +40,12 @@ router.post('/', async (req, res) => {
     }
 
     const host = smtp_host || 'smtp.gmail.com';
-    const port = smtp_port || 587;
-    const isSecure = secure || false;
+    const port = parseInt(smtp_port) || 587;
+    // O Nodemailer exige secure: true apenas para 465. Para 587, deve ser false.
+    const isSecure = port === 465;
+    
+    // Google app passwords podem vir com espaços. Removemos todos.
+    const cleanPassword = app_password.trim().replace(/\s+/g, '');
 
     // Validar conexão SMTP
     try {
@@ -49,14 +53,19 @@ router.post('/', async (req, res) => {
         host,
         port,
         secure: isSecure,
-        auth: { user: email, pass: app_password },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
+        requireTLS: port === 587, // força starttls para a porta 587
+        auth: { user: email, pass: cleanPassword },
+        tls: {
+          rejectUnauthorized: false // Aceitar conexões cloud sem quebrar por restrições rigorosas de CA
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
       });
 
       await transporter.verify();
       transporter.close();
     } catch (smtpErr) {
+      console.error('SMTP Error:', smtpErr); // Para registrar no console da Vercel/Render
       return res.status(400).json({
         error: 'Falha na validação SMTP. Verifique as credenciais e configurações.',
         details: smtpErr.message,
@@ -64,7 +73,7 @@ router.post('/', async (req, res) => {
     }
 
     const accountId = uuidv4();
-    const encryptedPassword = encrypt(app_password);
+    const encryptedPassword = encrypt(cleanPassword);
 
     dbRun(`
       INSERT INTO email_accounts (id, user_id, email, app_password, smtp_host, smtp_port, secure, daily_limit)
